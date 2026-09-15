@@ -1,0 +1,41 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.next/
+dist/
+build/
+
+# Local application state / credentials
+*.db
+*.sqlite
+*.sqlite3
+cookies.txt
+credentials.json
+token.json
+tokens.json
+sdk/.clipper-x-state.json
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

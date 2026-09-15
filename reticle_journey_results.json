@@ -1,0 +1,106 @@
+{
+  "timestamp": "2026-09-15T13:23:05.775Z",
+  "tool": "Reticle Playwright Engine (chromium-1243)",
+  "targetUrl": "http://127.0.0.1:8080",
+  "totalAssertions": 19,
+  "passedCount": 19,
+  "failedCount": 0,
+  "verdict": "PASS",
+  "assertions": [
+    {
+      "name": "Dashboard Title Verified",
+      "passed": true,
+      "details": "Title: \"Clipper-X Central Device Dashboard\""
+    },
+    {
+      "name": "Total Devices Stat Card Present",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Generated Single-Use Join URL",
+      "passed": true,
+      "details": "URL: http://127.0.0.1:8080/join?token=cne_xu_zYWtzE_l-ci7uWQD3Z4G7pDtYWFJN"
+    },
+    {
+      "name": "QR Code Canvas Rendered and Displayed",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Join Page Rendered on Mobile Client",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Mobile Client Platform Auto-Detected",
+      "passed": true,
+      "details": "Platform: android"
+    },
+    {
+      "name": "Device Status Transitioned to ONLINE",
+      "passed": true,
+      "details": "Badge: ONLINE"
+    },
+    {
+      "name": "Unique Node ID Assigned to Device",
+      "passed": true,
+      "details": "Node ID: node_b294c8394134c11b"
+    },
+    {
+      "name": "Public Egress IP Observed",
+      "passed": true,
+      "details": "IP: 127.0.0.1"
+    },
+    {
+      "name": "Heartbeat Pulse Confirmed Active (30s)",
+      "passed": true,
+      "details": "Status: ONLINE (1 pulses)"
+    },
+    {
+      "name": "Dashboard Total Devices Incremented by 1",
+      "passed": true,
+      "details": "New Total: 7"
+    },
+    {
+      "name": "Enrolled Device Appears in Live Dashboard Table",
+      "passed": true,
+      "details": "Found: node_b294c8394134c11b"
+    },
+    {
+      "name": "Device Status Displayed as ONLINE in Table",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Device Health Displayed as HEALTHY in Table",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "Single-Use Ticket Replay Rejected by Backend",
+      "passed": true,
+      "details": "Error: \"Enrollment ticket has already been used\""
+    },
+    {
+      "name": "Forged Ticket Claim Rejected by Backend",
+      "passed": true,
+      "details": "Error: \"Invalid or expired enrollment ticket\""
+    },
+    {
+      "name": "Unauthenticated Heartbeat Ping Rejected (401)",
+      "passed": true,
+      "details": "HTTP Status: 401"
+    },
+    {
+      "name": "Cross-Node Unauthorized Modification Blocked (401/403)",
+      "passed": true,
+      "details": "HTTP Status: 401"
+    },
+    {
+      "name": "Heartbeat Timer Cleanly Stopped on Disconnect",
+      "passed": true,
+      "details": ""
+    }
+  ]
+}

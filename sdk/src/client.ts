@@ -1,0 +1,375 @@
+import {
+  ClipperXSDKOptions,
+  NodeInfo,
+  NetworkInfo,
+  BandwidthResult,
+  UploadBandwidthResult,
+  NodeRegistrationResponse,
+  HeartbeatResult,
+  ReportNetworkInfoRequest,
+  NetworkAdapter,
+  SDKLogger,
+} from "./types";
+import { AuthenticationError, NetworkError, RegistrationError } from "./errors";
+import { registerNode, RegisterOptions } from "./registration";
+import { HeartbeatManager } from "./heartbeat";
+import { getPublicIP } from "./ip";
+import { measureDownloadBandwidth, measureUploadBandwidth } from "./bandwidth";
+import { LocalStateManager } from "./local-state";
+import { LocalNetworkAdapter } from "./network-adapter";
+
+class DefaultLogger implements SDKLogger {
+  info(message: string, meta?: Record<string, any>): void {
+    console.log(`[CLIPPER-X INFO] ${message}`, meta ? JSON.stringify(meta) : "");
+  }
+  warn(message: string, meta?: Record<string, any>): void {
+    console.warn(`[CLIPPER-X WARN] ${message}`, meta ? JSON.stringify(meta) : "");
+  }
+  error(message: string, meta?: Record<string, any>): void {
+    console.error(`[CLIPPER-X ERROR] ${message}`, meta ? JSON.stringify(meta) : "");
+  }
+  debug(message: string, meta?: Record<string, any>): void {
+    // Only log debug if DEBUG env var is set
+    if (process.env.CLIPPER_X_DEBUG) {
+      console.debug(`[CLIPPER-X DEBUG] ${message}`, meta ? JSON.stringify(meta) : "");
+    }
+  }
+}
+
+export class ClipperXNodeSDK {
+  private apiUrl: string;
+  private heartbeatIntervalMs: number;
+  private stateManager: LocalStateManager;
+  private networkAdapter: NetworkAdapter;
+  private logger: SDKLogger;
+  private heartbeatManager: HeartbeatManager | null = null;
+  private nodeId: string | null = null;
+  private nodeToken: string | null = null;
+  private cachedNodeInfo: NodeInfo | null = null;
+  private deviceName?: string;
+  private capabilities?: Record<string, boolean>;
+
+  constructor(options: ClipperXSDKOptions) {
+    if (!options.apiUrl) {
+      throw new Error("apiUrl is required for ClipperXNodeSDK");
+    }
+    this.apiUrl = options.apiUrl.replace(/\/+$/, "");
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs || 30000;
+    this.stateManager = new LocalStateManager(options.stateFilePath);
+    this.networkAdapter = options.networkAdapter || new LocalNetworkAdapter();
+    this.logger = options.logger || new DefaultLogger();
+    this.deviceName = options.deviceName;
+    this.capabilities = options.capabilities;
+
+    // Attempt to load persisted state
+    const saved = this.stateManager.loadState();
+    if (saved) {
+      this.nodeId = saved.nodeId;
+      this.nodeToken = saved.nodeToken;
+      this.initHeartbeatManager();
+      this.logger.debug(`Loaded existing node state: ${this.nodeId}`);
+    }
+  }
+
+  public getNodeId(): string | null {
+    return this.nodeId;
+  }
+
+  public getToken(): string | null {
+    return this.nodeToken;
+  }
+
+  public getNetworkAdapter(): NetworkAdapter {
+    return this.networkAdapter;
+  }
+
+  private initHeartbeatManager(): void {
+    if (!this.nodeId || !this.nodeToken) return;
+
+    if (this.heartbeatManager) {
+      this.heartbeatManager.updateCredentials(this.nodeId, this.nodeToken);
+      return;
+    }
+
+    this.heartbeatManager = new HeartbeatManager({
+      apiUrl: this.apiUrl,
+      nodeId: this.nodeId,
+      nodeToken: this.nodeToken,
+      sdkVersion: "1.0.0",
+      intervalMs: this.heartbeatIntervalMs,
+      logger: this.logger,
+    });
+  }
+
+  /**
+   * Registers node with Clipper-X backend or loads existing credentials.
+   */
+  public async register(
+    options: RegisterOptions = {},
+    forceNew: boolean = false
+  ): Promise<NodeRegistrationResponse> {
+    if (!forceNew && this.nodeId && this.nodeToken) {
+      this.logger.info(`Node already registered with ID: ${this.nodeId}`);
+      const currentStatus = this.cachedNodeInfo?.status || "REGISTERING";
+      return {
+        nodeId: this.nodeId,
+        token: this.nodeToken,
+        status: currentStatus,
+        platform: options.platform || process.platform,
+        sdkVersion: options.sdkVersion || "1.0.0",
+      };
+    }
+
+    const regOpts: RegisterOptions = {
+      deviceName: options.deviceName || this.deviceName,
+      capabilities: options.capabilities || this.capabilities,
+      platform: options.platform,
+      sdkVersion: options.sdkVersion,
+      ownerId: options.ownerId,
+    };
+
+    const res = await registerNode(this.apiUrl, regOpts);
+    this.nodeId = res.nodeId;
+    this.nodeToken = res.token;
+
+    // Persist credentials locally
+    this.stateManager.saveState({
+      nodeId: this.nodeId,
+      nodeToken: this.nodeToken,
+      platform: res.platform,
+      sdkVersion: res.sdkVersion,
+      registeredAt: new Date().toISOString(),
+    });
+
+    this.initHeartbeatManager();
+    this.logger.info(`Successfully registered node: ${this.nodeId}`);
+    return res;
+  }
+
+  /**
+   * Enrolls device using a one-time enrollment ticket generated by the backend.
+   * UX: User receives join link/ticket -> SDK claims ticket -> Registered -> Online.
+   */
+  public async enrollWithTicket(
+    enrollmentToken: string,
+    options: RegisterOptions = {}
+  ): Promise<NodeRegistrationResponse> {
+    const endpoint = `${this.apiUrl}/api/v1/enrollment/claim`;
+    const body = {
+      enrollment_token: enrollmentToken,
+      platform: options.platform || process.platform,
+      sdk_version: options.sdkVersion || "1.0.0",
+      device_name: options.deviceName || this.deviceName,
+      capabilities: options.capabilities || this.capabilities || {
+        network: true,
+        bandwidth_test: true,
+        heartbeat: true,
+      },
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err: any) {
+      throw new NetworkError(`Enrollment connection failed: ${err.message}`);
+    }
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new RegistrationError(`Enrollment failed with HTTP ${response.status}: ${errText}`, response.status);
+    }
+
+    const data: any = await response.json();
+    const nodeId = String(data.node_id);
+    const nodeToken = String(data.token);
+    this.nodeId = nodeId;
+    this.nodeToken = nodeToken;
+
+    this.stateManager.saveState({
+      nodeId,
+      nodeToken,
+      platform: data.platform || process.platform,
+      sdkVersion: data.sdk_version || "1.0.0",
+      registeredAt: new Date().toISOString(),
+    });
+
+    this.initHeartbeatManager();
+    this.logger.info(`Successfully enrolled node via ticket: ${this.nodeId}`);
+    return {
+      nodeId: data.node_id,
+      token: data.token,
+      status: data.status,
+      platform: data.platform,
+      sdkVersion: data.sdk_version,
+    };
+  }
+
+  /**
+   * Fetches latest durable node state from PostgreSQL backend.
+   */
+  public async getNode(): Promise<NodeInfo | null> {
+    if (!this.nodeId) {
+      return null;
+    }
+
+    const endpoint = `${this.apiUrl}/api/v1/nodes/${encodeURIComponent(this.nodeId)}`;
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new NetworkError(`Failed to fetch node: HTTP ${response.status}`, response.status);
+    }
+
+    const data: any = await response.json();
+    this.cachedNodeInfo = {
+      nodeId: data.node_id,
+      platform: data.platform,
+      sdkVersion: data.sdk_version,
+      status: data.status,
+      healthStatus: data.health_status,
+      capabilities: data.capabilities,
+      observedPublicIp: data.observed_public_ip,
+      downloadMbps: data.download_mbps,
+      uploadMbps: data.upload_mbps,
+      lastHeartbeatAt: data.last_heartbeat_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+
+    return this.cachedNodeInfo;
+  }
+
+  /**
+   * Discovers observed public egress IP via backend.
+   */
+  public async getPublicIP(): Promise<NetworkInfo> {
+    return getPublicIP(this.apiUrl);
+  }
+
+  /**
+   * Performs controlled download bandwidth measurement.
+   */
+  public async measureDownloadBandwidth(sizeMb?: number): Promise<BandwidthResult> {
+    return measureDownloadBandwidth(this.apiUrl, sizeMb);
+  }
+
+  /**
+   * Performs controlled upload bandwidth measurement.
+   */
+  public async measureUploadBandwidth(sizeMb?: number): Promise<UploadBandwidthResult> {
+    return measureUploadBandwidth(this.apiUrl, sizeMb);
+  }
+
+  /**
+   * Authenticated report of network telemetry (IP, bandwidth) to the backend.
+   */
+  public async reportNetworkInfo(info: ReportNetworkInfoRequest): Promise<NodeInfo> {
+    if (!this.nodeId || !this.nodeToken) {
+      throw new AuthenticationError("Node must be registered before reporting network info");
+    }
+
+    const endpoint = `${this.apiUrl}/api/v1/nodes/${encodeURIComponent(this.nodeId)}/network-info`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.nodeToken}`,
+        Accept: "application/json",
+      },
+      body: JSON.stringify(info),
+    });
+
+    if (response.status === 401) {
+      throw new AuthenticationError("Invalid node credentials", 401);
+    }
+    if (response.status === 403) {
+      throw new AuthenticationError("Unauthorized to modify this node", 403);
+    }
+    if (!response.ok) {
+      throw new NetworkError(`Reporting network info failed: HTTP ${response.status}`, response.status);
+    }
+
+    const data: any = await response.json();
+    return {
+      nodeId: data.node_id,
+      platform: data.platform,
+      sdkVersion: data.sdk_version,
+      status: data.status,
+      healthStatus: data.health_status,
+      capabilities: data.capabilities,
+      observedPublicIp: data.observed_public_ip,
+      downloadMbps: data.download_mbps,
+      uploadMbps: data.upload_mbps,
+      lastHeartbeatAt: data.last_heartbeat_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  /**
+   * Sends a single authenticated heartbeat ping on demand.
+   * Updates cached status upon successful acknowledgment.
+   */
+  public async sendHeartbeat(): Promise<HeartbeatResult> {
+    if (!this.nodeId || !this.nodeToken) {
+      throw new AuthenticationError("Cannot send heartbeat: Node is not registered");
+    }
+
+    this.initHeartbeatManager();
+    const result = await this.heartbeatManager!.sendPing();
+    if (this.cachedNodeInfo) {
+      this.cachedNodeInfo.status = result.status;
+      this.cachedNodeInfo.lastHeartbeatAt = result.acknowledgedAt;
+    }
+    return result;
+  }
+
+  /**
+   * Starts periodic heartbeat service.
+   */
+  public startHeartbeat(
+    onSuccess?: (res: HeartbeatResult) => void,
+    onError?: (err: Error) => void
+  ): void {
+    if (!this.nodeId || !this.nodeToken) {
+      throw new AuthenticationError("Cannot start heartbeat: Node is not registered");
+    }
+
+    this.initHeartbeatManager();
+    if (this.heartbeatManager) {
+      if (onSuccess) {
+        (this.heartbeatManager as any).onSuccess = onSuccess;
+      }
+      if (onError) {
+        (this.heartbeatManager as any).onError = onError;
+      }
+      this.heartbeatManager.start();
+    }
+  }
+
+  /**
+   * Stops periodic heartbeat service.
+   */
+  public stopHeartbeat(): void {
+    if (this.heartbeatManager) {
+      this.heartbeatManager.stop();
+    }
+  }
+
+  /**
+   * Returns true if heartbeat is currently active.
+   */
+  public isHeartbeatRunning(): boolean {
+    return this.heartbeatManager ? this.heartbeatManager.isRunning() : false;
+  }
+}

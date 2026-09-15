@@ -1,0 +1,83 @@
+import { ClipperXNodeSDK } from "./src";
+
+async function runDemo() {
+  const apiUrl = process.env.CLIPPER_X_API_URL || "http://localhost:8000";
+  const intervalMs = Number(process.env.HEARTBEAT_INTERVAL_MS) || 30000;
+  const stateFile = process.env.STATE_FILE_PATH || ".clipper-x-state.json";
+  const maxHeartbeats = Number(process.env.MAX_HEARTBEATS) || 0; // 0 = run indefinitely
+
+  console.log("====================================");
+  console.log("CLIPPER-X NODE SDK");
+  console.log("====================================");
+  console.log(`Backend API: ${apiUrl}\n`);
+
+  const sdk = new ClipperXNodeSDK({
+    apiUrl,
+    heartbeatIntervalMs: intervalMs,
+    stateFilePath: stateFile,
+    deviceName: process.env.DEVICE_NAME || "demo-node",
+  });
+
+  try {
+    console.log("Registering node...");
+    const reg = await sdk.register({
+      platform: process.platform,
+      sdkVersion: "1.0.0",
+      deviceName: process.env.DEVICE_NAME || "demo-node",
+    }, true); // Force new registration for demo
+    console.log(`✓ NODE_ID: ${reg.nodeId} (Initial Status: ${reg.status})\n`);
+
+    console.log("Detecting public egress IP...");
+    const ipInfo = await sdk.getPublicIP();
+    console.log(`✓ IP: ${ipInfo.publicIp} (${ipInfo.description})\n`);
+
+    console.log("Measuring bandwidth...");
+    const bw = await sdk.measureDownloadBandwidth(2); // 2 MB test payload
+    console.log(`✓ Download: ${bw.downloadMbps} Mbps (${bw.bytes} bytes in ${bw.durationMs}ms)`);
+    console.log(`  ${bw.description}\n`);
+
+    console.log("Reporting network telemetry to backend...");
+    await sdk.reportNetworkInfo({
+      observed_public_ip: ipInfo.publicIp,
+      download_mbps: bw.downloadMbps,
+    });
+    console.log("✓ Network telemetry recorded in PostgreSQL\n");
+
+    console.log("Starting heartbeat service (transitions REGISTERING -> ONLINE)...");
+
+    let count = 0;
+    sdk.startHeartbeat(
+      (res) => {
+        count++;
+        console.log(`✓ Heartbeat #${count} acknowledged (Status: ${res.status}, Acknowledged: ${res.acknowledgedAt})`);
+        if (maxHeartbeats > 0 && count >= maxHeartbeats) {
+          console.log(`\nReached target of ${maxHeartbeats} heartbeats. Demo complete.`);
+          sdk.stopHeartbeat();
+          process.exit(0);
+        }
+      },
+      (err) => {
+        console.error(`✗ Heartbeat failed: ${err.message}`);
+      }
+    );
+
+    // Keep process active
+    process.on("SIGINT", () => {
+      console.log("\nStopping SDK heartbeat and exiting...");
+      sdk.stopHeartbeat();
+      process.exit(0);
+    });
+
+    process.on("SIGTERM", () => {
+      sdk.stopHeartbeat();
+      process.exit(0);
+    });
+  } catch (error: any) {
+    console.error(`Demo failed: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  runDemo();
+}

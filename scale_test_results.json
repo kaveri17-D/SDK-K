@@ -1,0 +1,85 @@
+{
+  "stages": [
+    {
+      "node_count": 1,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 32.83,
+      "reg_p95_ms": 32.83,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 8.51,
+      "hb_p95_ms": 8.51,
+      "total_hb_duration_ms": 8.6,
+      "failures": 0,
+      "rss_mb": 345.65
+    },
+    {
+      "node_count": 5,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 6.17,
+      "reg_p95_ms": 9.17,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 25.29,
+      "hb_p95_ms": 26.33,
+      "total_hb_duration_ms": 27.8,
+      "failures": 0,
+      "rss_mb": 345.65
+    },
+    {
+      "node_count": 10,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 9.45,
+      "reg_p95_ms": 10.98,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 56.9,
+      "hb_p95_ms": 64.86,
+      "total_hb_duration_ms": 69.31,
+      "failures": 0,
+      "rss_mb": 345.65
+    },
+    {
+      "node_count": 20,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 7.02,
+      "reg_p95_ms": 9.87,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 88.57,
+      "hb_p95_ms": 89.47,
+      "total_hb_duration_ms": 97.69,
+      "failures": 0,
+      "rss_mb": 345.65
+    },
+    {
+      "node_count": 30,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 7.13,
+      "reg_p95_ms": 9.15,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 132.07,
+      "hb_p95_ms": 133.43,
+      "total_hb_duration_ms": 144.55,
+      "failures": 0,
+      "rss_mb": 345.65
+    },
+    {
+      "node_count": 40,
+      "reg_success_rate": "100.0%",
+      "reg_p50_ms": 6.6,
+      "reg_p95_ms": 8.61,
+      "hb_success_rate": "100.0%",
+      "hb_p50_ms": 153.99,
+      "hb_p95_ms": 157.54,
+      "total_hb_duration_ms": 172.45,
+      "failures": 0,
+      "rss_mb": 345.65
+    }
+  ],
+  "sustained": {
+    "total_tx": 1000,
+    "duration_s": 4.35,
+    "throughput_req_per_s": 229.6,
+    "initial_rss_mb": 345.65,
+    "post_rss_mb": 345.65,
+    "rss_delta_mb": 0.0,
+    "recovery_success_rate": "100%"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@clipper-x/node-sdk",
+  "version": "1.0.0",
+  "description": "Production V1 Clipper-X Node SDK for node registration, network telemetry and heartbeat management",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "node --test dist/tests/*.test.js",
+    "demo": "node dist/demo.js"
+  },
+  "keywords": [
+    "clipper-x",
+    "node-sdk",
+    "telemetry",
+    "registry"
+  ],
+  "author": "Clipper-X Team",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
